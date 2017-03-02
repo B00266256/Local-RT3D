@@ -91,9 +91,15 @@
     <None Include="minimal.frag" />
     <None Include="minimal.vert" />
     <None Include="mvp.vert" />
+    <None Include="phong-tex.frag" />
+    <None Include="phong-tex.vert" />
     <None Include="phong.frag" />
     <None Include="phong.vert" />
     <None Include="simple.frag" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="fabric.bmp" />
+    <Image Include="studdedmetal.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

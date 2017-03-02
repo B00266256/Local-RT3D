@@ -49,5 +49,19 @@
     <None Include="simple.frag">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="phong-tex.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="phong-tex.vert">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="fabric.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="studdedmetal.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

@@ -24,6 +24,7 @@ using namespace glm;
 std::stack<mat4> mvStack;
 
 GLuint mvpShaderProgram;
+GLuint textures[2];
 
 // Globals
 // Real programs don't use globals :-D
@@ -38,6 +39,17 @@ GLfloat cubeVerts[] = { -0.5, -0.5f, -0.5f,
 						-0.5, 0.5f, 0.5f,
 						0.5, 0.5f, 0.5f,
 						0.5, -0.5f, 0.5f };
+
+GLfloat cubeTexCoords[] = { 0.0f, 0.0f,
+							0.0f, 1.0f,
+							1.0f, 1.0f,
+							1.0f, 0.0f,
+							1.0f, 1.0f,
+							1.0f, 0.0f,
+							0.0f, 0.0f,
+							0.0f, 1.0f };
+
+
 GLfloat cubeColours[] = { 0.0f, 0.0f, 0.0f,
 						0.0f, 1.0f, 0.0f,
 						1.0f, 1.0f, 0.0f,
@@ -76,12 +88,20 @@ rt3d::lightStruct light0 = {
 	{ 0.0f, 0.0f, 1.0f, 1.0f }  // position
 };
 
-rt3d::materialStruct material0 = {
-	{ 0.4f, 0.2f, 0.2f, 1.0f }, // ambient
-	{ 0.8f, 0.5f, 0.5f, 1.0f }, // diffuse
-	{ 1.0f, 0.8f, 0.8f, 1.0f }, // specular
+rt3d::materialStruct material2 = { // material with transparency
+	{ 0.4f, 0.2f, 0.2f, 0.3f }, // ambient
+	{ 0.8f, 0.5f, 0.5f, 0.3f }, // diffuse
+	{ 1.0f, 0.8f, 0.8f, 0.3f }, // specular
 	2.0f  // shininess
 };
+
+rt3d::materialStruct material0 = { // material with no transparency
+	{ 0.2f, 0.2f, 0.4f, 1.0f }, // ambient
+	{ 0.5f, 0.5f, 0.8f, 1.0f }, // diffuse
+	{ 0.8f, 0.8f, 1.0f, 1.0f }, // specular
+	2.0f  // shininess
+};
+
 
 // Set up rendering context
 SDL_Window * setupRC(SDL_GLContext &context) {
@@ -100,7 +120,8 @@ SDL_Window * setupRC(SDL_GLContext &context) {
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);  // double buffering on
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4); // Turn on x4 multisampling anti-aliasing (MSAA)
- 
+	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8); // 8 bit alpha buffering
+
     // Create 800x600 window
 	window = SDL_CreateWindow("SDL/GLM/OpenGL Demo", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         800, 600, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN );
@@ -112,26 +133,64 @@ SDL_Window * setupRC(SDL_GLContext &context) {
 	return window;
 }
 
+// A simple texture loading function
+// lots of room for improvement - and better error checking!
+GLuint loadBitmap(char *fname)
+{
+	GLuint texID;
+	glGenTextures(1, &texID); // generate texture ID
+
+							  // load file - using core SDL library
+	SDL_Surface *tmpSurface;
+	tmpSurface = SDL_LoadBMP(fname);
+	if (!tmpSurface)
+	{
+		std::cout << "Error loading bitmap" << std::endl;
+	}
+
+	// bind texture and set parameters
+	glBindTexture(GL_TEXTURE_2D, texID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	SDL_PixelFormat *format = tmpSurface->format;
+	GLuint externalFormat, internalFormat;
+	if (format->Amask) {
+		internalFormat = GL_RGBA;
+		externalFormat = (format->Rmask < format->Bmask) ? GL_RGBA : GL_BGRA;
+	}
+	else {
+		internalFormat = GL_RGB;
+		externalFormat = (format->Rmask < format->Bmask) ? GL_RGB : GL_BGR;
+	}
+
+	glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, tmpSurface->w, tmpSurface->h, 0,
+		externalFormat, GL_UNSIGNED_BYTE, tmpSurface->pixels);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	SDL_FreeSurface(tmpSurface); // texture loaded, free the temporary buffer
+	return texID;	// return value of texture ID
+}
+
+
 void init(void) {
 
 	glEnable(GL_DEPTH_TEST); // enable depth testing
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	
-
-	//MVP = mat4(1.0); // init to identity matrix
 	// For this simple example we'll be using the most basic of shader programs
-	mvpShaderProgram = rt3d::initShaders("phong.vert", "phong.frag");
+	mvpShaderProgram = rt3d::initShaders("phong-tex.vert", "phong-tex.frag");
+	
+	//Load textures here:
+	textures[0] = loadBitmap("fabric.bmp");
+	textures[1] = loadBitmap("studdedmetal.bmp");
+
 	// Going to create our mesh objects here
 	rt3d::setLight(mvpShaderProgram, light0);
 	rt3d::setMaterial(mvpShaderProgram, material0);
-
-	meshObjects[0] = rt3d::createMesh(cubeVertCount, cubeVerts, nullptr, cubeVerts,
-		nullptr, cubeIndexCount, cubeIndices);
-
-	//meshObjects[0] = rt3d::createMesh(cubeVertCount, cubeVerts,
-		//cubeColours, nullptr, nullptr, cubeIndexCount, cubeIndices);
-
-
+	meshObjects[0] = rt3d::createMesh(cubeVertCount, cubeVerts, nullptr, cubeVerts, cubeTexCoords, cubeIndexCount, cubeIndices); //second cubeVerts should be cube normals to gather more realistic reulsts
 }
 
 void draw(SDL_Window * window) {
@@ -151,126 +210,26 @@ void draw(SDL_Window * window) {
 	projection = glm::perspective(float(60.0f*DEG_TO_RADIAN), 800.0f / 600.0f, 1.0f, 50.0f);
 	rt3d::setUniformMatrix4fv(mvpShaderProgram, "projection", glm::value_ptr(projection));
 
-	// render the sun
+	// render the cube
 	glm::mat4 modelview(1.0);
 	mvStack.push(modelview); // push modelview to stack
 	mvStack.top() = glm::translate(mvStack.top(), glm::vec3(0.0f, 0.0f, -4.0f));
 	mvStack.top() = glm::rotate(mvStack.top(), r, glm::vec3(0.0f, 1.0f, 0.0f));
+	glBindTexture(GL_TEXTURE_2D, textures[1]); // fabric texture
+	rt3d::setMaterial(mvpShaderProgram, material0);
 	rt3d::setUniformMatrix4fv(mvpShaderProgram, "modelview", glm::value_ptr(mvStack.top()));
 	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-	// planet
+
+	// other cube
 	mvStack.push(mvStack.top());// push modelview to stack
 	mvStack.top() = glm::translate(mvStack.top(), glm::vec3(2.0f, 0.0f, 0.0f));
 	mvStack.top() = glm::rotate(mvStack.top(), r, glm::vec3(0.0f, 1.0f, 0.0f));
 	mvStack.top() = glm::scale(mvStack.top(), glm::vec3(0.3f, 0.3f, 0.3f));
+	glBindTexture(GL_TEXTURE_2D, textures[0]); // fabric texture
+	rt3d::setMaterial(mvpShaderProgram, material2);
 	rt3d::setUniformMatrix4fv(mvpShaderProgram, "modelview", glm::value_ptr(mvStack.top()));
 	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
 	
-	
-	
-	/*
-	//Set up projection
-	mat4 projection(1.0);
-	projection = perspective(60.0f*DEG_TO_RADIAN, 800.0f / 600.0f, 1.0f, 50.0f); //Set the perspective Perspectiva Angle. (Width,Height,Near, Far)
-
-	// Render The Sun - "Sol"
-	mat4 modelview(1.0), MVP(1.0);
-	mvStack.push(modelview); // push modelview to stack
-	mvStack.top() = translate(mvStack.top(), vec3(0.0f, 0.0f, -4.0f));
-	mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-	mvStack.top() = scale(mvStack.top(), vec3(0.5f, 0.5f, 0.5f));
-	MVP = projection * mvStack.top();
-	rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-	// Sol I - "Mercury"
-	mvStack.push(mvStack.top());// push modelview to stack
-	mvStack.top() = translate(mvStack.top(), vec3(1.0f, 0.0f, 0.0f));
-	mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-	mvStack.top() = scale(mvStack.top(), vec3(0.1f, 0.1f, 0.1f));
-	MVP = projection * mvStack.top();
-	rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-	mvStack.pop();
-
-	// Sol II - "Venus"
-	mvStack.push(mvStack.top());// push modelview to stack
-	mvStack.top() = translate(mvStack.top(), vec3(1.5f, 0.0f, 0.0f));
-	mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-	mvStack.top() = scale(mvStack.top(), vec3(0.2f, 0.2f, 0.2f));
-	MVP = projection * mvStack.top();
-	rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-	mvStack.pop();
-
-	// Sol III - "Earth"
-	mvStack.push(mvStack.top());// push modelview to stack
-	mvStack.top() = translate(mvStack.top(), vec3(2.5f, 0.0f, 0.0f));
-	mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-	mvStack.top() = scale(mvStack.top(), vec3(0.25f, 0.25f, 0.25f));
-	MVP = projection * mvStack.top();
-	rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-		// Earth I - "The Moon"
-		mvStack.push(mvStack.top());// push modelview to stack
-		mvStack.top() = translate(mvStack.top(), vec3(1.0f, 0.0f, 0.0f));
-		mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-		mvStack.top() = scale(mvStack.top(), vec3(0.1f, 0.1f, 0.1f));
-		MVP = projection * mvStack.top();
-		rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-		rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-		mvStack.pop();
-	mvStack.pop();
-
-	// Sol IV - "Mars"
-	mvStack.push(mvStack.top());// push modelview to stack
-	mvStack.top() = translate(mvStack.top(), vec3(3.5f, 0.0f, 0.0f));
-	mvStack.top() = rotate(mvStack.top(), r * 6, rotationDirection);
-	mvStack.top() = scale(mvStack.top(), vec3(0.15f, 0.15f, 0.15f));
-	MVP = projection * mvStack.top();
-	rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-		// Mars I - "Phobos"
-		mvStack.push(mvStack.top());// push modelview to stack
-		mvStack.top() = translate(mvStack.top(), vec3(1.0f, -0.2f, 0.0f));
-		mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-		mvStack.top() = scale(mvStack.top(), vec3(0.1f, 0.1f, 0.1f));
-		MVP = projection * mvStack.top();
-		rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-		rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-		mvStack.pop();
-		// Mars II - "Demios"
-		mvStack.push(mvStack.top());// push modelview to stack
-		mvStack.top() = translate(mvStack.top(), vec3(2.0f, 0.2f, 0.0f));
-		mvStack.top() = rotate(mvStack.top(), r, rotationDirection);
-		mvStack.top() = scale(mvStack.top(), vec3(0.1f, 0.1f, 0.1f));
-		MVP = projection * mvStack.top();
-		rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-		rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-		mvStack.pop();
-	mvStack.pop();
-/*
-	// Sol V - "Jupiter"
-	mvStack.push(mvStack.top());// push modelview to stack
-	mvStack.top() = translate(mvStack.top(), vec3(2.0f, -0.5f, 2.0f));
-	mvStack.top() = rotate(mvStack.top(), r * 6, rotationDirection);
-	mvStack.top() = scale(mvStack.top(), vec3(0.2f, 0.2f, 0.2f));
-	MVP = projection * mvStack.top();
-	rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-	rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-		// Jupiter I-LXIV "A Fuckton Of Moons"
-
-			mvStack.push(mvStack.top());// push modelview to stack
-			mvStack.top() = translate(mvStack.top(), vec3(2.0f, -0.5f, 2.0f));
-			mvStack.top() = rotate(mvStack.top(), r * 6, rotationDirection);
-			mvStack.top() = scale(mvStack.top(), vec3(0.2f, 0.2f, 0.2f));
-			MVP = projection * mvStack.top();
-			rt3d::setUniformMatrix4fv(mvpShaderProgram, "MVP", value_ptr(MVP));
-			rt3d::drawIndexedMesh(meshObjects[0], cubeIndexCount, GL_TRIANGLES);
-			mvStack.pop();
-	mvStack.pop();
-*/
-
-
 	SDL_GL_SwapWindow(window); // swap buffers
 }
 
